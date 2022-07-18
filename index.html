@@ -1,0 +1,163 @@
+<html>
+	<head>
+		<script src="https://unpkg.com/@tensorflow/tfjs"></script>
+		<script src="https://unpkg.com/@tensorflow-models/mobilenet"></script>
+	</head>
+
+	<!-- To select video & audio source -->
+	<div class="select">
+		<label for="audioSource" style="font-size: 24px;">Audio source: </label
+		><select id="audioSource" style="font-size: 24px;"></select>
+	</div>
+
+	<div class="select">
+		<label for="videoSource" style="font-size: 24px;">Video source: </label
+		><select id="videoSource" style="font-size: 24px;"></select>
+	</div>
+
+	<video width="400" height="300" autoplay muted playsinline></video>
+	<p  style="font-size: 24px;">Model loading...</p>
+	<img width="400" height="300" />
+
+	<!-- script for load mobilenet model -->
+	<script>
+		// https://zhuanlan.zhihu.com/p/268131046
+		const video = document.querySelector("video")
+		const image = document.querySelector("img")
+		const status = document.querySelector("p")
+
+		const canvas = document.createElement("canvas")
+		const ctx = canvas.getContext("2d")
+
+		let model
+
+		// main()
+
+		async function runModelOnStream() {
+			status.innerText = "Model loading..."
+			model = await mobilenet.load()
+			status.innerText = "Model is loaded!"
+
+			canvas.width = video.videoWidth
+			canvas.height = video.videoHeight
+
+			refresh()
+		}
+
+		async function refresh() {
+			ctx.drawImage(video, 0, 0)
+			image.src = canvas.toDataURL("image/png")
+
+			await model.load()
+			const predictions = await model.classify(image)
+
+			const className = predictions[0].className
+			const percentage = Math.floor(100 * predictions[0].probability)
+
+			status.innerHTML = percentage + "%" + " " + className
+
+			setTimeout(refresh, 100)
+		}
+	</script>
+
+	<!-- script for change devices -->
+	<script>
+		// https://webrtc.github.io/samples/src/content/devices/input-output/
+		// https://simpl.info/getusermedia/sources/
+		// https://github.com/samdutton/simpl/blob/gh-pages/getusermedia/sources/js/main.js
+		var videoElement = document.querySelector("video")
+		var audioSelect = document.querySelector("select#audioSource")
+		var videoSelect = document.querySelector("select#videoSource")
+		audioSelect.onchange = getStream
+		videoSelect.onchange = () => {
+			getStream().then(runModelOnStream)
+		}
+
+		// funcion to init and find video & audio devices
+		async function initMediaDevicesAndApplyModel() {
+			await getStream()
+			await getDevices().then(gotDevices)
+			await runModelOnStream()
+		}
+		initMediaDevicesAndApplyModel()
+
+		function getDevices() {
+			// AFAICT in Safari this only gets default devices until gUM is called :/
+			return navigator.mediaDevices.enumerateDevices()
+		}
+
+		function gotDevices(deviceInfos) {
+			console.log("deviceInfos", deviceInfos)
+			window.deviceInfos = deviceInfos // make available to console
+			console.log("Available input and output devices:", deviceInfos)
+			for (const deviceInfo of deviceInfos) {
+				const option = document.createElement("option")
+				option.value = deviceInfo.deviceId
+				if (deviceInfo.kind === "audioinput") {
+					option.text =
+						deviceInfo.label ||
+						`Microphone ${audioSelect.length + 1}`
+					audioSelect.appendChild(option)
+				} else if (deviceInfo.kind === "videoinput") {
+					option.text =
+						deviceInfo.label || `Camera ${videoSelect.length + 1}`
+					videoSelect.appendChild(option)
+				}
+			}
+		}
+
+		function getStream() {
+			if (window.stream) {
+				window.stream.getTracks().forEach((track) => {
+					track.stop()
+				})
+			}
+			const audioSource = audioSelect.value
+			const videoSource = videoSelect.value
+			const constraints = {
+				audio: {
+					deviceId: audioSource ? { exact: audioSource } : undefined,
+				},
+				video: {
+					deviceId: videoSource ? { exact: videoSource } : undefined,
+				},
+			}
+			return navigator.mediaDevices
+				.getUserMedia(constraints)
+				.then(gotStream)
+				.catch(handleError)
+		}
+
+		function gotStream(stream) {
+			window.stream = stream // make stream available to console
+			audioSelect.selectedIndex = [...audioSelect.options].findIndex(
+				(option) => option.text === stream.getAudioTracks()[0].label,
+			)
+			videoSelect.selectedIndex = [...videoSelect.options].findIndex(
+				(option) => option.text === stream.getVideoTracks()[0].label,
+			)
+			videoElement.srcObject = stream
+		}
+
+		function handleError(error) {
+			console.error("Error: ", error)
+		}
+	</script>
+
+	<!-- Dont run this script, it will cause whole html slow down for 20 secs, this script is outdated-->
+	<!-- <p id="google_translate_element" class="scroll-link"></p>
+	<script type="text/javascript">
+		// OVG ALL
+		// https://www.w3schools.com/howto/howto_google_translate.asp
+		function googleTranslateElementInit() {
+			new google.translate.TranslateElement(
+				{ pageLanguage: "en" },
+				"google_translate_element",
+			)
+		}
+	</script>
+	<script
+		type="text/javascript"
+		src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"
+	></script> -->
+</html>
